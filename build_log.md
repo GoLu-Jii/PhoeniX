@@ -27,3 +27,9 @@ Append-only: add a dated entry after each component finishes; do not rewrite ear
 - An unauthenticated GitHub verification request hit HTTP 403 rate limiting. Added root `.env` loading with `python-dotenv`; token presence was confirmed without printing its value.
 - The first live server attempt could not bind port 8000. Retried on 8001; the `openai` investigation returned HTTP 200.
 - GitHub returned HTTP 202 while computing `openai/openai-ruby` commit activity; PHOENIX preserved available data and reported a partial result with a warning.
+
+## 2026-10-11 — Basic GitHub signal detection
+- Added deterministic findings for public repositories created within 30 days and for per-repository completed-week activity at least 5 commits and at least twice the prior four-week average.
+- Excluded incomplete current weeks; missing or discontinuous history produces no spike finding.
+- Investigation responses now include findings with rule IDs, observed dates/counts, repository source URLs, evidence IDs, interpretation, and limitations.
+- Backend suite: 17 passed. `pip check` and `git diff --check` passed.

@@ -33,6 +33,12 @@ Demos use a mock company I control plus 2–3 clearly open-source companies. Fin
 - **Rejected / changed from plan:** No architecture change and no credential values exposed.
 - **Why (evidence):** Token presence was detected. The `openai` investigation returned HTTP 200, 10 repositories, and 453 recent commits with partial status; `openai/openai-ruby` commit activity was still computing. Backend tests passed (13 passed) and `pip check` passed.
 
+### [04:12] Basic GitHub signal detection
+- **AI did:** Added deterministic findings for repositories created within 30 days and per-repository completed-week commit spikes, then attached findings and repository evidence IDs in the investigation response.
+- **I decided:** Applied the requested thresholds and kept findings observational, source-linked, and under `unannounced_move`.
+- **Rejected / changed from plan:** No scores, ranking, LLM interpretation, or strategy claims were added.
+- **Why (evidence):** Full backend suite passed (17 passed); `pip check` and `git diff --check` passed.
+
 ---
 
 ## Challenge Card #1 (08:00)
