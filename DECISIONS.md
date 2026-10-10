@@ -21,6 +21,18 @@ Demos use a mock company I control plus 2–3 clearly open-source companies. Fin
 - **Rejected / changed from plan:**
 - **Why (evidence):**
 
+### [03:07] GitHub data collection
+- **AI did:** Added bounded GitHub account/repository collection, an investigation API route, and mocked tests for success, validation, retry, and partial failure.
+- **I decided:** Keep this increment data-only; signal detection remains a later task.
+- **Rejected / changed from plan:** Did not add website, careers, release, or interpretation collection.
+- **Why (evidence):** Backend tests passed (11 passed); `pip check` reported no broken requirements.
+
+### [03:33] GitHub token loading and live smoke test
+- **AI did:** Loaded `GITHUB_TOKEN` from the project-root `.env` using `python-dotenv`; started the API from `frontend/` with the shell token unset.
+- **I decided:** Keep the token server-side and report only whether it is configured.
+- **Rejected / changed from plan:** No architecture change and no credential values exposed.
+- **Why (evidence):** Token presence was detected. The `openai` investigation returned HTTP 200, 10 repositories, and 453 recent commits with partial status; `openai/openai-ruby` commit activity was still computing. Backend tests passed (13 passed) and `pip check` passed.
+
 ---
 
 ## Challenge Card #1 (08:00)
