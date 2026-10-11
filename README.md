@@ -124,6 +124,3 @@ npm run build
 
 ---
 
-## License
-
-MIT (c) 2026 Phoenix Contributors. Built for competitive intelligence & open-source verification.
