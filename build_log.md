@@ -87,3 +87,27 @@ Append-only: add a dated entry after each component finishes; do not rewrite ear
 - Updated `backend/app/analysis.py` to pass only `merged_findings` and compact `website_content` to the second LLM call, removing raw commit message and repository clutter.
 - Confirmed fallback to rule-based signal detector activates only when Groq genuinely fails across all batches.
 - Backend suite: 43 passed in 0.73s.
+
+## 2026-10-11 — Response payload ordering and Groq 429 backoff
+- Reordered the `investigate_company` result dictionary so top-level intelligence fields (`status`, `account`, `detection_source`, `analysis`, `findings`, `backing_commits`, `website`) appear immediately at the start of the JSON response before the raw 1.7 MB `repositories` and `parsed_commits` arrays.
+- Added automatic retry loops with exponential backoff on HTTP 429 in `_call_groq_batch` and `analyze_company`, allowing chained LLM calls to complete reliably on Groq rate limits.
+- Backend suite: 45 passed in 0.81s. `git diff --check` passed with 0 errors.
+
+## 2026-10-11 — Compact default response payload and non-speculative intelligence grounding
+- Implemented `compact_investigation_result` in `backend/app/investigation.py` to reduce default payload size from ~1.8 MB to ~7–10 KB (>99% reduction).
+- Default response returns clean monitored repository metadata and commit counts while omitting raw 50-commit `recent_commits` arrays, 52-week activity matrices, and the root `parsed_commits` dump.
+- Kept full uncompacted data stored in `latest_investigation_store` so `/api/signals` continues to access complete commit traces.
+- Exposed full raw history through `include_raw: true` / `debug: true` options via request body or query parameter.
+- Updated Groq system prompts in `analysis.py` and `detectors.py` to enforce strict evidence grounding, prohibiting speculative conclusions or unverified corporate intent from being stated as facts.
+- Added comprehensive unit and integration tests in `test_api.py` for compact payloads, debug flags, and full two-stage Groq execution.
+- Backend suite: 47 passed in 0.83s. `git diff --check` passed cleanly.
+
+## 2026-10-11 — Hacktoberfest 2026 themed frontend implementation and verification
+- Implemented responsive, editorial React 19 + TypeScript frontend modeled after the Hacktoberfest 2026 design system (`AI belongs to everyone`).
+- Applied deep forest slate (`#28453a`), coral-red (`#ff6f59`), warm cream (`#f6f4ee`), solid retro borders (`2px solid #181818`), and hard offset drop shadows (`4px 4px 0px #181818`).
+- Built homepage hero with dual-field search box (GitHub URL + Company Website URL), prominent coral-red `INVESTIGATE COMPANY` button, quick presets (`Encode`, `Vercel`, `Octocat`), and bottom partner ticker strip.
+- Created animated radar scanner loading state with live progress stepper tracking multi-stage recon (repository connection, commit ingestion, burst analysis, website extraction, and dual Groq synthesis).
+- Designed structured results dashboard: Company Profile header, Strategic Verdict card (`Stated Focus vs. Engineering Reality`), Claim vs. Evidence Matrix cards with color-coded verdict badges (`SUPPORTED`, `CONTRADICTION`, `PARTLY SUPPORTED`, `NO PUBLIC TRACE`), Observed Signals cards with split right-side evidence/date badge boxes and expandable supporting commits, Monitored Repositories cards, and Technical Notices & Limitations drawer.
+- Added comprehensive empty, loading, and error states with retry capabilities.
+- Connected directly to live backend APIs via Vite proxy to `http://127.0.0.1:8000`. Verified full end-to-end investigation run and mobile responsiveness (stacking inputs, drawer links, adaptive grid) with browser subagent.
+- Production build (`tsc -b && vite build`) and linter (`oxlint`) passed with 0 errors and 0 warnings.

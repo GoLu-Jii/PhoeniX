@@ -381,3 +381,35 @@ def test_detect_signals_partial_batch_success_keeps_groq_findings(monkeypatch) -
 	assert len(result["findings"]) == 1
 	assert result["findings"][0]["title"] == "Batch 1 Signal"
 	assert result["backing_commits"] == ["commit 0"]
+
+
+def test_groq_batch_retries_on_429_and_succeeds(monkeypatch) -> None:
+	monkeypatch.setattr(detectors, "load_dotenv", lambda path: None)
+	monkeypatch.setattr(detectors.time, "sleep", lambda s: None)
+	monkeypatch.setenv("GROQ_API_KEY", "mock-groq-key")
+
+	parsed_commits = [
+		{"commit_date": "2026-10-01", "commit_message": "commit test", "committed_repo": "acme/repo"}
+	]
+
+	call_count = 0
+
+	def handler(request: httpx.Request) -> httpx.Response:
+		nonlocal call_count
+		call_count += 1
+		if call_count == 1:
+			return httpx.Response(429, request=request)
+		return httpx.Response(
+			200,
+			json={"choices": [{"message": {"content": json.dumps({
+				"findings": [{"title": "Retried Signal", "committed_repo": "acme/repo", "description": "Success after 429"}],
+				"backing_commits": ["commit test"],
+			})}}]},
+			request=request,
+		)
+
+	result = detect_signals(parsed_commits, transport=httpx.MockTransport(handler))
+
+	assert call_count == 2
+	assert result["detection_source"] == "groq"
+	assert result["findings"][0]["title"] == "Retried Signal"

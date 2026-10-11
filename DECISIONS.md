@@ -87,6 +87,25 @@ Demos use a mock company I control plus 2–3 clearly open-source companies. Fin
 - **Rejected / changed from plan:** Rejected passing raw commit messages to the final LLM call; rejected falling back to rule-based detector when partial batches succeed.
 - **Why (evidence):** Full backend suite passed (43 passed in 0.73s); `git diff --check` passed with 0 errors.
 
+### [17:00] Response Payload Ordering and Groq HTTP 429 Retry Backoff
+- **AI did:** Reordered `investigate_company` return dictionary so high-priority intelligence fields (`status`, `account`, `detection_source`, `analysis`, `findings`, `backing_commits`, `website`) appear at the top of the JSON payload before the 1.7 MB raw `repositories` and `parsed_commits` arrays. Added automated retry loops with backoff on HTTP 429 in both `_call_groq_batch` and `analyze_company`.
+- **I decided:** Keep all raw repositories and parsed commits in the response for backward compatibility, but place intelligence at the top so Swagger UI and frontend clients do not have to scroll past 50,000 lines of raw commits. Handle Groq rate limits with a short backoff (1.5-2.0s) so sequential LLM calls succeed with Groq instead of prematurely degrading to rule-based fallback.
+- **Rejected / changed from plan:** Rejected stripping repositories completely from the payload to avoid breaking existing downstream clients.
+- **Why (evidence):** Full backend suite passed (45 passed in 0.81s); live Vercel investigation confirmed Groq detection and comparative analysis.
+
+### [17:35] Compact Default Response Payload and Non-Speculative Intelligence Grounding
+- **AI did:** Reduced the default `/api/investigations` response payload from ~1.8 MB to ~7–10 KB (>99% reduction) by providing `compact_investigation_result`. Omitted root `parsed_commits` and raw `recent_commits` / `weekly_commit_activity` arrays from monitored repositories, while keeping `recent_commits_count` and complete metadata. Retained full histories internally in `latest_investigation_store` and exposed full raw data via `include_raw: true` / `debug: true` (body flags or query parameters). Updated Groq prompts in `detectors.py` and `analysis.py` with strict grounding rules prohibiting speculative conclusions or unverified corporate intent from being stated as facts.
+- **I decided:** Make the frontend-optimized compact payload the default while preserving debug access for internal tracing and power users. Require all verdicts and reality statements to describe observable public code evidence rather than conjecture.
+- **Rejected / changed from plan:** Rejected removing repository metadata entirely from the compact response; kept clean repository summaries with commit counts.
+- **Why (evidence):** Full backend suite passed (47 passed in 0.83s); live end-to-end investigation with `encode` and `octocat` confirmed both Groq stages (`detection_source: groq`, `analysis_source: groq`), verified compact payload size reduction to 7–10 KB, and verified internal store retains parsed commits for `/api/signals`.
+
+### [18:15] Hacktoberfest 2026 Styled Frontend Implementation & Verification
+- **AI did:** Built a complete, production-grade React 19 + TypeScript frontend modeled after the Hacktoberfest 2026 visual theme (`AI belongs to everyone`). Styled with deep forest slate (`#28453a`), coral-red (`#ff6f59`), warm cream (`#f6f4ee`), 2px solid retro borders, and 4px–6px offset hard drop shadows. Integrated a dual-field search bar (GitHub URL + Website URL), quick presets (`Encode`, `Vercel`, `Octocat`), real-time radar scanner loading state with progress steps, Company Profile header, Strategic Verdict card (`Stated Focus vs. Engineering Reality`), Claim vs. Evidence Matrix cards with color-coded verdict badges, Observed Signals cards with split right-side evidence/date badges and expandable supporting commits, Monitored Repositories cards, and Technical Notices drawer. Connected directly to the live backend `/api/investigations` with Vite proxy and verified the complete flow and mobile responsiveness using the browser subagent.
+- **I decided:** Strictly preserve Phoenix branding, terminology, and real backend connectivity while faithfully capturing the retro-editorial aesthetic of Hacktoberfest 2026. Use real data from the backend rather than mock payloads. Ensure mobile responsiveness by stacking input fields and hiding navigation clutter below 860px.
+- **Rejected / changed from plan:** Rejected using mock datasets; rejected using TailwindCSS to ensure maximum precision and control with Vanilla CSS; rejected speculative claims in UI labels.
+- **Why (evidence):** End-to-end browser subagent run verified the full flow against live Groq APIs (`encode` investigation completed in ~14s, returning 10 repositories, 3 detected signals, 6 say-do gaps, and strategic verdict). Production build (`tsc -b && vite build`) and `oxlint` passed with 0 errors. All 47 backend tests pass.
+
+
 ---
 
 ## Challenge Card #1 (08:00)

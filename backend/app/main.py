@@ -1,14 +1,23 @@
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from .detectors import detect_signals, parse_github_commits
-from .investigation import investigate_company, investigate_github
+from .investigation import compact_investigation_result, investigate_company, investigate_github
 
 app = FastAPI(
 	title="PHOENIX API",
 	description="Infrastructure, investigation, and company intelligence API for PHOENIX.",
+)
+
+app.add_middleware(
+	CORSMiddleware,
+	allow_origins=["*"],
+	allow_credentials=True,
+	allow_methods=["*"],
+	allow_headers=["*"],
 )
 
 latest_investigation_store: dict[str, Any] = {}
@@ -23,12 +32,15 @@ class InvestigationRequest(BaseModel):
 	target_url: str | None = None
 	github_url: str | None = None
 	website_url: str | None = None
+	include_raw: bool = False
+	debug: bool = False
 
 	model_config = {
 		"json_schema_extra": {
 			"example": {
 				"github_url": "https://github.com/octocat",
 				"website_url": "https://example.com",
+				"include_raw": False,
 			}
 		}
 	}
@@ -98,23 +110,47 @@ def _process_signals(
 
 
 @app.post("/api/investigations")
-def create_investigation(request: InvestigationRequest) -> dict:
+def create_investigation(
+	request: InvestigationRequest,
+	include_raw: bool | None = None,
+	debug: bool | None = None,
+) -> dict:
 	github_target = request.github_url or request.target_url
 	if not github_target:
 		raise HTTPException(status_code=422, detail="github_url or target_url is required.")
+
+	is_raw = bool(
+		(include_raw is True)
+		or (debug is True)
+		or request.include_raw
+		or request.debug
+	)
 	try:
-		result = investigate_company(github_target, website_url=request.website_url)
+		# Retrieve complete uncompacted data so internal store keeps full commit history
+		try:
+			full_result = investigate_company(github_target, website_url=request.website_url, include_raw=True)
+		except TypeError:
+			full_result = investigate_company(github_target, website_url=request.website_url)
+
 		latest_investigation_store.clear()
-		latest_investigation_store.update(result)
-		return result
+		latest_investigation_store.update(full_result)
+
+		if is_raw:
+			return full_result
+
+		return compact_investigation_result(full_result)
 	except ValueError as error:
 		raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @app.post("/api/analyze")
-def create_analysis(request: InvestigationRequest) -> dict:
+def create_analysis(
+	request: InvestigationRequest,
+	include_raw: bool | None = None,
+	debug: bool | None = None,
+) -> dict:
 	"""Alias for complete investigation and analysis."""
-	return create_investigation(request)
+	return create_investigation(request, include_raw=include_raw, debug=debug)
 
 
 @app.get("/api/signals")

@@ -92,3 +92,37 @@ def test_analyze_company_fallback_when_api_key_missing(monkeypatch) -> None:
 
 	assert len(result["warnings"]) == 1
 	assert "rule-based analysis used" in result["warnings"][0]["message"]
+
+
+def test_analyze_company_retries_on_429_and_succeeds(monkeypatch) -> None:
+	monkeypatch.setattr(analysis, "load_dotenv", lambda path: None)
+	monkeypatch.setattr(analysis.time, "sleep", lambda s: None)
+	monkeypatch.setenv("GROQ_API_KEY", "mock-groq-key")
+
+	calls = []
+	mock_response = {
+		"stated_focus": "Fast cloud infrastructure.",
+		"engineering_reality": "Heavy investment in developer tooling.",
+		"say_do_gaps": [],
+		"strategic_verdict": "On track.",
+	}
+
+	def handler(request: httpx.Request) -> httpx.Response:
+		calls.append(request)
+		if len(calls) == 1:
+			return httpx.Response(429, headers={"retry-after": "1"}, request=request)
+		return httpx.Response(
+			200,
+			json={"choices": [{"message": {"content": json.dumps(mock_response)}}]},
+			request=request,
+		)
+
+	github_data = {"account": {"login": "test"}, "findings": [], "repositories": []}
+	website_data = {"title": "Test Title"}
+
+	result = analyze_company(github_data, website_data, transport=httpx.MockTransport(handler))
+
+	assert len(calls) == 2
+	assert result["analysis_source"] == "groq"
+	assert result["stated_focus"] == "Fast cloud infrastructure."
+	assert result["warnings"] == []

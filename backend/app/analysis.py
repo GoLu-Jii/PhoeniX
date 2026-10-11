@@ -1,5 +1,6 @@
 import json
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +11,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_DEFAULT_MODEL = "openai/gpt-oss-20b"
 GROQ_TIMEOUT = 30.0
+MAX_ANALYSIS_RETRIES = 3
 
 
 def _build_rule_based_analysis(
@@ -136,27 +138,31 @@ def analyze_company(
 				"role": "system",
 				"content": (
 					"You are an expert technical intelligence and competitive analysis analyst. "
-					"You are given a technology company's compact official website content (what it says it is doing) "
-					"and its merged GitHub engineering findings (what its code and commits actually show).\n\n"
-					"Compare what the company claims on its website with its merged engineering findings.\n"
-					"Detect Say-Do Gaps and Unannounced Moves:\n"
-					"- Stated Focus: Summary of the company's official positioning and product claims.\n"
-					"- Engineering Reality: Summary of what their public repositories and merged engineering findings actually show.\n"
-					"- Say-Do Gaps: List specific comparisons between claims and code. Use one of these verdicts:\n"
+					"You are given a technology company's compact official website content (what it claims publicly) "
+					"and its merged GitHub engineering findings (what its code and commits concretely show).\n\n"
+					"Guidelines for objective, evidence-based intelligence:\n"
+					"1. Strict Evidence Grounding: Base all observations strictly on the provided website content and observable GitHub findings.\n"
+					"2. Do NOT Present Speculative Conclusions as Facts: Clearly distinguish verified public evidence from preliminary indicators. "
+					"Never assert unconfirmed corporate strategy, internal management motives, or unverified roadmaps as established facts. "
+					"Use measured, objective language (e.g. 'Public repositories demonstrate active development of...', 'Commit patterns indicate engineering focus on...', rather than asserting unconfirmed internal corporate strategy as a proven fact).\n"
+					"3. Detect Say-Do Gaps and Unannounced Moves:\n"
+					"- Stated Focus: Objective summary of the company's official positioning and product claims.\n"
+					"- Engineering Reality: Objective summary of what public repositories and findings concretely show.\n"
+					"- Say-Do Gaps: Compare claims and observable code. Use one of these exact verdicts:\n"
 					"  ['supported', 'partly_supported', 'no_public_corroboration', 'contradictory_evidence', 'unannounced_move'].\n"
-					"- Strategic Verdict: High-level synthesis of where the company is heading and hidden shifts.\n\n"
+					"- Strategic Verdict: A balanced, evidence-backed synthesis of observable directions without speculative conjecture.\n\n"
 					"Return ONLY valid JSON with this exact format:\n"
 					"{\n"
 					'  "stated_focus": "Clear summary of public website positioning",\n'
 					'  "engineering_reality": "Clear summary of actual code and findings",\n'
 					'  "say_do_gaps": [\n'
 					"    {\n"
-					'      "claim": "Specific website claim or topic",\n'
-					'      "reality": "What public code and findings show",\n'
+					'      "claim": "Specific website claim or observed unannounced initiative",\n'
+					'      "reality": "What public code and findings concretely show",\n'
 					'      "verdict": "supported" | "partly_supported" | "no_public_corroboration" | "contradictory_evidence" | "unannounced_move"\n'
 					"    }\n"
 					"  ],\n"
-					'  "strategic_verdict": "High-level strategic takeaway"\n'
+					'  "strategic_verdict": "Objective, evidence-backed strategic summary without speculation"\n'
 					"}"
 				),
 			},
@@ -167,56 +173,74 @@ def analyze_company(
 		],
 	}
 
-	try:
-		with httpx.Client(timeout=GROQ_TIMEOUT, transport=transport) as client:
-			response = client.post(
-				GROQ_API_URL,
-				headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-				json=request_body,
+	for attempt in range(MAX_ANALYSIS_RETRIES):
+		try:
+			with httpx.Client(timeout=GROQ_TIMEOUT, transport=transport) as client:
+				response = client.post(
+					GROQ_API_URL,
+					headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+					json=request_body,
+				)
+				if response.status_code == 429 and attempt < MAX_ANALYSIS_RETRIES - 1:
+					retry_after = 2.0
+					if "retry-after" in response.headers:
+						try:
+							retry_after = float(response.headers["retry-after"])
+						except (ValueError, TypeError):
+							pass
+					time.sleep(min(max(retry_after, 1.5), 5.0))
+					continue
+
+				response.raise_for_status()
+				content = response.json()["choices"][0]["message"]["content"]
+				parsed = json.loads(content)
+
+				stated_focus = parsed.get("stated_focus") or ""
+				engineering_reality = parsed.get("engineering_reality") or ""
+				say_do_gaps = parsed.get("say_do_gaps") or []
+				strategic_verdict = parsed.get("strategic_verdict") or ""
+
+				if not isinstance(say_do_gaps, list):
+					say_do_gaps = []
+
+				clean_gaps = []
+				for g in say_do_gaps:
+					if isinstance(g, dict) and g.get("claim"):
+						clean_gaps.append(
+							{
+								"claim": str(g.get("claim", "")).strip(),
+								"reality": str(g.get("reality", "")).strip(),
+								"verdict": str(g.get("verdict", "partly_supported")).strip(),
+							}
+						)
+
+				return {
+					"analysis_source": "groq",
+					"stated_focus": str(stated_focus).strip(),
+					"engineering_reality": str(engineering_reality).strip(),
+					"say_do_gaps": clean_gaps,
+					"strategic_verdict": str(strategic_verdict).strip(),
+					"warnings": [],
+				}
+
+		except httpx.HTTPStatusError as error:
+			if error.response.status_code == 429 and attempt < MAX_ANALYSIS_RETRIES - 1:
+				time.sleep(2.0)
+				continue
+			if error.response.status_code == 413:
+				warning = "Groq token limit exceeded (HTTP 413); rule-based analysis used."
+			else:
+				warning = f"Groq returned HTTP {error.response.status_code}; rule-based analysis used."
+			return _build_rule_based_analysis(github_data, website_data, warning)
+		except httpx.HTTPError:
+			return _build_rule_based_analysis(
+				github_data, website_data, "Groq request failed due to network error; rule-based analysis used."
 			)
-			response.raise_for_status()
-			content = response.json()["choices"][0]["message"]["content"]
-			parsed = json.loads(content)
+		except (ValueError, KeyError, IndexError, TypeError):
+			return _build_rule_based_analysis(
+				github_data, website_data, "Groq analysis response was invalid; rule-based analysis used."
+			)
 
-			stated_focus = parsed.get("stated_focus") or ""
-			engineering_reality = parsed.get("engineering_reality") or ""
-			say_do_gaps = parsed.get("say_do_gaps") or []
-			strategic_verdict = parsed.get("strategic_verdict") or ""
-
-			if not isinstance(say_do_gaps, list):
-				say_do_gaps = []
-
-			clean_gaps = []
-			for g in say_do_gaps:
-				if isinstance(g, dict) and g.get("claim"):
-					clean_gaps.append(
-						{
-							"claim": str(g.get("claim", "")).strip(),
-							"reality": str(g.get("reality", "")).strip(),
-							"verdict": str(g.get("verdict", "partly_supported")).strip(),
-						}
-					)
-
-			return {
-				"analysis_source": "groq",
-				"stated_focus": str(stated_focus).strip(),
-				"engineering_reality": str(engineering_reality).strip(),
-				"say_do_gaps": clean_gaps,
-				"strategic_verdict": str(strategic_verdict).strip(),
-				"warnings": [],
-			}
-
-	except httpx.HTTPStatusError as error:
-		if error.response.status_code == 413:
-			warning = "Groq token limit exceeded (HTTP 413); rule-based analysis used."
-		else:
-			warning = f"Groq returned HTTP {error.response.status_code}; rule-based analysis used."
-		return _build_rule_based_analysis(github_data, website_data, warning)
-	except httpx.HTTPError:
-		return _build_rule_based_analysis(
-			github_data, website_data, "Groq request failed due to network error; rule-based analysis used."
-		)
-	except (ValueError, KeyError, IndexError, TypeError):
-		return _build_rule_based_analysis(
-			github_data, website_data, "Groq analysis response was invalid; rule-based analysis used."
-		)
+	return _build_rule_based_analysis(
+		github_data, website_data, "Groq rate limit exceeded (HTTP 429); rule-based analysis used."
+	)

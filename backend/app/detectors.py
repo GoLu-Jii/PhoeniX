@@ -1,5 +1,6 @@
 import json
 import os
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -283,7 +284,7 @@ def _call_groq_batch(
 					"    {\n"
 					'      "title": "Short descriptive title of the signal",\n'
 					'      "committed_repo": "Repository name",\n'
-					'      "description": "What was observed and why it is suspicious or unusual"\n'
+					'      "description": "Objective observation of the detected pattern or changes without speculative assumptions of intent"\n'
 					"    }\n"
 					"  ],\n"
 					'  "backing_commits": [\n'
@@ -292,6 +293,7 @@ def _call_groq_batch(
 					"}\n\n"
 					"CRITICAL RULES:\n"
 					"- Return ONLY findings and backing_commits.\n"
+					"- Ground findings strictly in observable commit evidence. Do not state speculative conclusions or unverified corporate motives as facts.\n"
 					"- In backing_commits, include ONLY specific commit messages that support content-based findings (clues about what is being built or changed).\n"
 					"- For pacing or burst findings ('unusual commit pace', bursts, spikes), DO NOT paste commit messages into backing_commits. Describe the burst or pace in the finding description instead, because velocity is a timing signal rather than a message-content signal.\n"
 					"- If nothing suspicious or unusual is detected, return {\"findings\": [], \"backing_commits\": []}."
@@ -310,47 +312,57 @@ def _call_groq_batch(
 		],
 	}
 
-	try:
-		with httpx.Client(timeout=GROQ_TIMEOUT, transport=transport) as client:
-			response = client.post(
-				GROQ_API_URL,
-				headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-				json=request_body,
-			)
-			response.raise_for_status()
-			content = response.json()["choices"][0]["message"]["content"]
-			parsed = json.loads(content)
-			raw_findings = parsed.get("findings", [])
-			raw_backing = parsed.get("backing_commits", [])
-			if not isinstance(raw_findings, list):
-				return [], [], "Groq response findings must be a list."
-
-			clean_findings = []
-			for f in raw_findings:
-				if not isinstance(f, dict):
+	max_batch_retries = 2
+	for attempt in range(max_batch_retries):
+		try:
+			with httpx.Client(timeout=GROQ_TIMEOUT, transport=transport) as client:
+				response = client.post(
+					GROQ_API_URL,
+					headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+					json=request_body,
+				)
+				if response.status_code == 429 and attempt < max_batch_retries - 1:
+					time.sleep(2.0)
 					continue
-				title = f.get("title")
-				if not title or not isinstance(title, str):
-					continue
-				clean_findings.append({
-					"title": title.strip(),
-					"committed_repo": str(f.get("committed_repo") or "").strip(),
-					"description": str(f.get("description") or "").strip(),
-				})
+				response.raise_for_status()
+				content = response.json()["choices"][0]["message"]["content"]
+				parsed = json.loads(content)
+				raw_findings = parsed.get("findings", [])
+				raw_backing = parsed.get("backing_commits", [])
+				if not isinstance(raw_findings, list):
+					return [], [], "Groq response findings must be a list."
 
-			clean_backing = [
-				str(msg).strip() for msg in raw_backing if isinstance(msg, str) and msg.strip()
-			] if isinstance(raw_backing, list) else []
+				clean_findings = []
+				for f in raw_findings:
+					if not isinstance(f, dict):
+						continue
+					title = f.get("title")
+					if not title or not isinstance(title, str):
+						continue
+					clean_findings.append({
+						"title": title.strip(),
+						"committed_repo": str(f.get("committed_repo") or "").strip(),
+						"description": str(f.get("description") or "").strip(),
+					})
 
-			return clean_findings, clean_backing, None
-	except httpx.HTTPStatusError as error:
-		if error.response.status_code == 413:
-			return [], [], "Groq token limit exceeded (HTTP 413)."
-		return [], [], f"Groq returned HTTP {error.response.status_code}."
-	except httpx.HTTPError:
-		return [], [], "Groq request failed due to network error."
-	except (ValueError, KeyError, IndexError, TypeError):
-		return [], [], "Groq response format was invalid."
+				clean_backing = [
+					str(msg).strip() for msg in raw_backing if isinstance(msg, str) and msg.strip()
+				] if isinstance(raw_backing, list) else []
+
+				return clean_findings, clean_backing, None
+		except httpx.HTTPStatusError as error:
+			if error.response.status_code == 429 and attempt < max_batch_retries - 1:
+				time.sleep(2.0)
+				continue
+			if error.response.status_code == 413:
+				return [], [], "Groq token limit exceeded (HTTP 413)."
+			return [], [], f"Groq returned HTTP {error.response.status_code}."
+		except httpx.HTTPError:
+			return [], [], "Groq request failed due to network error."
+		except (ValueError, KeyError, IndexError, TypeError):
+			return [], [], "Groq response format was invalid."
+
+	return [], [], "Groq rate limit exceeded (HTTP 429)."
 
 
 def groq_signal_detector(
