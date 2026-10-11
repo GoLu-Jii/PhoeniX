@@ -3,7 +3,9 @@
 > **Turn scattered public footprints into actionable competitive intelligence.**
 > See what a tech company is building before it announces it.
 
-![Phoenix Hero Banner](docs/images/phoenix-hero.png)
+[![Phoenix Hero Banner](docs/images/phoenix-hero.png)](https://youtu.be/BEzJULsvzJM)
+
+Demo Video: [https://youtu.be/BEzJULsvzJM](https://youtu.be/BEzJULsvzJM)
 
 ---
 
