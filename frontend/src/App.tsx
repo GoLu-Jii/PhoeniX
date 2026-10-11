@@ -114,6 +114,7 @@ export default function App() {
   const [result, setResult] = useState<InvestigationResult | null>(null)
   const [showRawJson, setShowRawJson] = useState(false)
   const [expandedFindings, setExpandedFindings] = useState<Record<number, boolean>>({})
+  const [signalCategoryFilter, setSignalCategoryFilter] = useState<'all' | 'functional' | 'maintenance'>('all')
 
   const resultsRef = useRef<HTMLDivElement>(null)
 
@@ -626,77 +627,168 @@ export default function App() {
             </div>
           )}
 
-          {/* Section: Observed Signals (Screenshot 2 Style) */}
+          {/* Section: Notable Changes in the Last 30 Days (Signals) */}
           <div className="hf-section-header" id="signals">
             <div>
               <div className="hero-kicker" style={{ color: 'var(--hf-muted-text)', marginBottom: '0.25rem' }}>
-                COMMITS & TIMING ANOMALIES
+                COMMITS & ACTIVITY RECON (LAST 30 DAYS)
               </div>
               <h2 className="section-title">
-                Observed <span className="coral-accent">Signals.</span>
+                Notable <span className="coral-accent">Changes.</span>
               </h2>
             </div>
             <p className="section-subtitle">
-              Significant engineering shifts, synchronized activity bursts, and provider expansions detected in recent history.
+              Distinguishing substantive feature and functional shifts from routine repository maintenance (documentation, tests, version bumps).
             </p>
           </div>
 
           {result.findings && result.findings.length > 0 ? (
-            <div className="cards-editorial-grid">
-              {result.findings.map((finding, idx) => {
-                const isBurst = finding.title.toLowerCase().includes('burst') || finding.title.toLowerCase().includes('pace')
-                const isExpanded = Boolean(expandedFindings[idx])
+            (() => {
+              const isRoutine = (f: { title: string; description: string; category?: string }) => {
+                if (f.category === 'maintenance') return true
+                if (f.category === 'functional') return false
+                const text = `${f.title} ${f.description}`.toLowerCase()
                 return (
-                  <div key={idx} className="signal-card">
-                    <div className="signal-card-main">
-                      <div className="signal-badge-row">
-                        <span className="badge-mono badge-pop">
-                          {finding.committed_repo || 'GENERAL'}
-                        </span>
-                        {isBurst && (
-                          <span className="badge-mono badge-amber">
-                            VELOCITY BURST
-                          </span>
-                        )}
-                      </div>
-
-                      <h3 className="signal-title">{finding.title}</h3>
-                      <p className="signal-desc">{finding.description}</p>
-
-                      {/* Supporting commits list */}
-                      {result.backing_commits && result.backing_commits.length > 0 && !isBurst && (
-                        <div className="commits-accordion">
-                          <button
-                            type="button"
-                            className="commits-toggle-btn"
-                            onClick={() => toggleFindingExpanded(idx)}
-                          >
-                            <span>{isExpanded ? '▼ Hide Supporting Commits' : '▶ View Supporting Commits'}</span>
-                          </button>
-
-                          {isExpanded && (
-                            <ul className="commits-list">
-                              {result.backing_commits.map((msg, cIdx) => (
-                                <li key={cIdx}>{msg}</li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Right-side Badge Box (Hacktoberfest Screenshot 2 style) */}
-                    <div className="signal-side-badge">
-                      <div className="badge-date-top">SIGNAL</div>
-                      <div className="badge-date-main">#{idx + 1}</div>
-                      <div className="badge-date-bottom">
-                        {isBurst ? 'BURST' : 'FEATURE'}
-                      </div>
-                    </div>
-                  </div>
+                  text.includes('bump') ||
+                  text.includes('depend') ||
+                  text.includes('doc') ||
+                  text.includes('chore') ||
+                  text.includes('housekeep') ||
+                  text.includes('test') ||
+                  text.includes('lint')
                 )
-              })}
-            </div>
+              }
+
+              const allFindings = result.findings
+              const functionalFindings = allFindings.filter((f) => !isRoutine(f as { title: string; description: string; category?: string }))
+              const maintenanceFindings = allFindings.filter((f) => isRoutine(f as { title: string; description: string; category?: string }))
+              const displayedFindings =
+                signalCategoryFilter === 'functional'
+                  ? functionalFindings
+                  : signalCategoryFilter === 'maintenance'
+                  ? maintenanceFindings
+                  : allFindings
+
+              return (
+                <>
+                  {/* Category Filter Pills (Challenge Card 2 Improvement) */}
+                  <div style={{ display: 'flex', gap: '0.6rem', marginBottom: '1.75rem', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="btn-pill-sample"
+                      onClick={() => setSignalCategoryFilter('all')}
+                      style={{
+                        backgroundColor: signalCategoryFilter === 'all' ? 'var(--hf-black)' : 'transparent',
+                        color: signalCategoryFilter === 'all' ? '#ffffff' : 'var(--hf-dark-text)',
+                        borderColor: 'var(--hf-black)',
+                        fontWeight: 700,
+                      }}
+                    >
+                      All Signals ({allFindings.length})
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-pill-sample"
+                      onClick={() => setSignalCategoryFilter('functional')}
+                      style={{
+                        backgroundColor: signalCategoryFilter === 'functional' ? 'var(--hf-coral)' : 'transparent',
+                        color: signalCategoryFilter === 'functional' ? 'var(--hf-black)' : 'var(--hf-dark-text)',
+                        borderColor: signalCategoryFilter === 'functional' ? 'var(--hf-black)' : '#a0a0a0',
+                        fontWeight: 800,
+                      }}
+                    >
+                      Notable Functional Changes ({functionalFindings.length})
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-pill-sample"
+                      onClick={() => setSignalCategoryFilter('maintenance')}
+                      style={{
+                        backgroundColor: signalCategoryFilter === 'maintenance' ? 'var(--hf-slate-light)' : 'transparent',
+                        color: signalCategoryFilter === 'maintenance' ? '#ffffff' : 'var(--hf-dark-text)',
+                        borderColor: signalCategoryFilter === 'maintenance' ? 'var(--hf-black)' : '#a0a0a0',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Routine Maintenance ({maintenanceFindings.length})
+                    </button>
+                  </div>
+
+                  {displayedFindings.length > 0 ? (
+                    <div className="cards-editorial-grid">
+                      {displayedFindings.map((finding, idx) => {
+                        const isBurst = finding.title.toLowerCase().includes('burst') || finding.title.toLowerCase().includes('pace')
+                        const routine = isRoutine(finding as { title: string; description: string; category?: string })
+                        const isExpanded = Boolean(expandedFindings[idx])
+                        return (
+                          <div key={idx} className="signal-card">
+                            <div className="signal-card-main">
+                              <div className="signal-badge-row">
+                                <span className="badge-mono badge-pop">
+                                  {finding.committed_repo || 'GENERAL'}
+                                </span>
+                                {isBurst ? (
+                                  <span className="badge-mono badge-amber">
+                                    VELOCITY BURST
+                                  </span>
+                                ) : routine ? (
+                                  <span className="badge-mono" style={{ backgroundColor: '#e2e8f0', color: '#475569', borderColor: '#94a3b8' }}>
+                                    ROUTINE MAINTENANCE
+                                  </span>
+                                ) : (
+                                  <span className="badge-mono" style={{ backgroundColor: '#dcfce7', color: '#166534', borderColor: '#86efac' }}>
+                                    SUBSTANTIVE CHANGE
+                                  </span>
+                                )}
+                              </div>
+
+                              <h3 className="signal-title">{finding.title}</h3>
+                              <p className="signal-desc">{finding.description}</p>
+
+                              {/* Supporting commits list */}
+                              {result.backing_commits && result.backing_commits.length > 0 && !isBurst && (
+                                <div className="commits-accordion">
+                                  <button
+                                    type="button"
+                                    className="commits-toggle-btn"
+                                    onClick={() => toggleFindingExpanded(idx)}
+                                  >
+                                    <span>{isExpanded ? '▼ Hide Supporting Commits' : '▶ View Supporting Commits'}</span>
+                                  </button>
+
+                                  {isExpanded && (
+                                    <ul className="commits-list">
+                                      {result.backing_commits.map((msg, cIdx) => (
+                                        <li key={cIdx}>{msg}</li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Right-side Badge Box */}
+                            <div className="signal-side-badge">
+                              <div className="badge-date-top">SIGNAL</div>
+                              <div className="badge-date-main">#{idx + 1}</div>
+                              <div className="badge-date-bottom">
+                                {isBurst ? 'BURST' : routine ? 'CHORE' : 'FEATURE'}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <div className="hf-card-static" style={{ padding: '2rem', textAlign: 'center', marginBottom: '3rem' }}>
+                      <p style={{ margin: 0, color: 'var(--hf-muted-text)' }}>
+                        No changes found in the selected category.
+                      </p>
+                    </div>
+                  )}
+                </>
+              )
+            })()
           ) : (
             <div className="hf-card-static" style={{ padding: '2rem', textAlign: 'center', marginBottom: '3rem' }}>
               <p style={{ margin: 0, color: 'var(--hf-muted-text)' }}>

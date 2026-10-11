@@ -109,14 +109,24 @@ Demos use a mock company I control plus 2–3 clearly open-source companies. Fin
 ---
 
 ## Challenge Card #1 (08:00)
-- **Card:**
+- **Card:** The Shift — Adapt when the rules change. Incorporate official marketing claims & website narratives against GitHub code traces to verify competitive reality.
 - **Stayed / changed / removed:**
-- **AI did / I decided / I rejected:**
+  - **Stayed:** Core GitHub data ingestion, 45-day commit velocity analysis, deterministic burst pacing.
+  - **Changed:** Added SSRF-safe website scraper (`BeautifulSoup4`), two-stage Groq LLM reasoning (commit signal interpretation + Say-Do arbitration matrix), compact payload optimization (>99% payload reduction), and HTTP 429 retry backoff.
+  - **Removed:** Rigid keyword-only detectors and heavy raw repository arrays in the default response.
+- **AI did / I decided / I rejected:** AI implemented the website collector, comparative analysis prompts, and commit batching. I decided to enforce non-speculative grounding rules preventing speculative conclusions from being stated as facts. I rejected unorganized single-file bloat.
 
 ## Challenge Card #2 (16:30)
-- **Card:**
+- **Card:** Pressure Test — Real-World Feedback from external users on Reddit (`r/hackathon`).
+- **Decision:** Distinguish Significant Changes from Routine Maintenance
+- **Context:** External feedback highlighted that listing repositories and commit activity alone does not explain what a company has materially changed. Routine maintenance can also be mistaken for evidence of a new product.
+- **Decision:** Separate meaningful functional changes from routine work such as documentation, tests, and version updates. Highlight engineering changes using their supporting commit evidence, without assuming that a feature addition proves an upcoming product announcement.
+- **Reason:** This makes Phoenix's competitive intelligence more useful, easier to verify, and less likely to overstate what public evidence actually tells us.
 - **Stayed / changed / removed:**
-- **AI did / I decided / I rejected:**
+  - **Stayed:** Commit history ingestion and supporting commit verification drawers.
+  - **Changed:** Added "Notable Changes (Last 30 Days)" in the UI with explicit filter tabs and visual tags separating Substantive Changes from Routine Maintenance.
+  - **Removed:** Flat, unclassified signal lists that allowed routine version bumps to look like product announcements.
+- **Evidence:** Genuine Reddit post and feedback screenshots stored in `feedback/screenshots/` and documented in `feedback/README.md`.
 
 ## Final notes
-What worked, what didn't, and what the backtest showed (if done).
+Phoenix evolved from a raw GitHub commit inspector into a full-fledged competitive engineering intelligence platform with live Say-Do arbitration, Hacktoberfest 2026 editorial design, and external user feedback integration. The prototype is tested and ready to ship.

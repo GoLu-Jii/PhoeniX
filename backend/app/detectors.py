@@ -223,11 +223,15 @@ def merge_findings(findings_lists: list[list[dict[str, Any]]]) -> list[dict[str,
 			if key2:
 				seen_repo_desc.add(key2)
 
-			merged.append({
+			entry: dict[str, Any] = {
 				"title": title,
 				"committed_repo": repo,
 				"description": desc,
-			})
+			}
+			if "category" in f:
+				entry["category"] = str(f["category"]).lower().strip()
+
+			merged.append(entry)
 	return merged
 
 
@@ -284,7 +288,8 @@ def _call_groq_batch(
 					"    {\n"
 					'      "title": "Short descriptive title of the signal",\n'
 					'      "committed_repo": "Repository name",\n'
-					'      "description": "Objective observation of the detected pattern or changes without speculative assumptions of intent"\n'
+					'      "description": "Objective observation of the detected pattern or changes without speculative assumptions of intent",\n'
+					'      "category": "functional"  // either "functional" for substantive features/architectures/bursts or "maintenance" for routine docs/tests/bumps\n'
 					"    }\n"
 					"  ],\n"
 					'  "backing_commits": [\n'
@@ -293,6 +298,7 @@ def _call_groq_batch(
 					"}\n\n"
 					"CRITICAL RULES:\n"
 					"- Return ONLY findings and backing_commits.\n"
+					"- Distinguish substantive functional changes (category: 'functional') from routine maintenance, doc updates, test additions, and dependency bumps (category: 'maintenance').\n"
 					"- Ground findings strictly in observable commit evidence. Do not state speculative conclusions or unverified corporate motives as facts.\n"
 					"- In backing_commits, include ONLY specific commit messages that support content-based findings (clues about what is being built or changed).\n"
 					"- For pacing or burst findings ('unusual commit pace', bursts, spikes), DO NOT paste commit messages into backing_commits. Describe the burst or pace in the finding description instead, because velocity is a timing signal rather than a message-content signal.\n"

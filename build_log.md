@@ -111,3 +111,9 @@ Append-only: add a dated entry after each component finishes; do not rewrite ear
 - Added comprehensive empty, loading, and error states with retry capabilities.
 - Connected directly to live backend APIs via Vite proxy to `http://127.0.0.1:8000`. Verified full end-to-end investigation run and mobile responsiveness (stacking inputs, drawer links, adaptive grid) with browser subagent.
 - Production build (`tsc -b && vite build`) and linter (`oxlint`) passed with 0 errors and 0 warnings.
+
+## 2026-10-12 — Challenge Card 2 — Real-World Feedback
+- Feedback source: Reddit (`r/hackathon`)
+- A commenter suggested summarizing meaningful changes from the past month instead of merely listing repositories, and warned against presenting routine maintenance as a potential product announcement.
+- Action taken: Updated Phoenix's engineering-signal presentation to distinguish substantive code changes from maintenance activity. Added "Notable Changes (Last 30 Days)" with explicit filtering between substantive feature additions and routine maintenance (docs, tests, version bumps). Supporting commit messages remain available for inspection.
+- Evidence: Screenshots of the original post and genuine feedback are stored in `feedback/screenshots/`.
